@@ -1,22 +1,26 @@
 import React from 'react';
-import { Server, HelpCircle, FlaskConical, Sprout } from 'lucide-react';
+import { Server, HelpCircle, FlaskConical, Sprout, ArrowLeft } from 'lucide-react';
 
 interface HeaderProps {
   onOpenInfo: () => void;
   onOpenConnection: () => void;
   onOpenTests: () => void;
+  onVolverAlCuestionario?: () => void;
   activeTab: 'cuestionario' | 'pruebas' | 'info';
   setActiveTab: (tab: 'cuestionario' | 'pruebas' | 'info') => void;
   apiBaseUrl: string;
+  vistaActiva?: 'cuestionario' | 'resultado';
 }
 
 export const Header: React.FC<HeaderProps> = ({
   onOpenInfo,
   onOpenConnection,
   onOpenTests,
+  onVolverAlCuestionario,
   activeTab,
   setActiveTab,
   apiBaseUrl,
+  vistaActiva,
 }) => {
   return (
     <header className="border-b border-[#52796F]/20 bg-[#FFFFFF] sticky top-0 z-30 shadow-xs">
@@ -33,10 +37,10 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
             <div>
               <span className="text-xl font-bold tracking-tight text-[#1D3B2F] font-serif block leading-none">
-                PlantExpert
+                PlantExpert Pro
               </span>
               <span className="text-[10px] font-mono tracking-widest uppercase text-[#52796F] block mt-0.5">
-                Laboratorio Euskadi
+                PhytoDiagnostic Enterprise
               </span>
             </div>
           </button>
@@ -66,19 +70,30 @@ export const Header: React.FC<HeaderProps> = ({
             }`}
           >
             <FlaskConical className="w-4 h-4 text-[#2D5A46]" aria-hidden="true" />
-            <span>Casos de Prueba</span>
+            <span>Casos Clínicos</span>
           </button>
           <button
             onClick={onOpenInfo}
             className="whitespace-nowrap shrink-0 transition-colors hover:text-[#1D3B2F] cursor-pointer py-1 flex items-center gap-1.5"
           >
             <HelpCircle className="w-4 h-4 text-[#52796F]" aria-hidden="true" />
-            <span>Ámbito y Fuentes</span>
+            <span>Dossier &amp; Fuentes</span>
           </button>
         </nav>
 
-        {/* Zone 3: 1 Primary Action */}
+        {/* Zone 3: Actions */}
         <div className="flex items-center gap-2 shrink-0">
+          {vistaActiva === 'resultado' && onVolverAlCuestionario && (
+            <button
+              onClick={onVolverAlCuestionario}
+              className="px-3 py-1.5 text-xs font-bold text-white bg-[#1D3B2F] hover:bg-[#142B22] rounded-md transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs focus-visible:ring-2 focus-visible:ring-[#1D3B2F]"
+              title="Volver al cuestionario y banco de pruebas"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" aria-hidden="true" />
+              <span>Volver</span>
+            </button>
+          )}
+
           <button
             onClick={onOpenConnection}
             title={`Configuración del endpoint SWI-Prolog (${apiBaseUrl})`}
@@ -95,13 +110,13 @@ export const Header: React.FC<HeaderProps> = ({
       <div className="bg-[#FAFBF7] border-t border-[#52796F]/15 px-4 py-1.5 text-xs text-[#465E55]">
         <div className="max-w-6xl mx-auto flex flex-col sm:flex-row sm:items-center justify-between gap-1">
           <div className="flex items-center gap-2">
-            <span className="font-semibold text-[#1D3B2F]">Ámbito:</span>
-            <span>Tomateras al aire libre (Solanum lycopersicum) en huertos domésticos de la vertiente atlántica vasca.</span>
+            <span className="font-semibold text-[#1D3B2F]">Cultivo y Zona:</span>
+            <span>Tomateras al aire libre (Solanum lycopersicum) · Vertiente atlántica de Euskadi.</span>
           </div>
-          <div className="text-[#B46536] font-medium whitespace-nowrap flex items-center gap-1 text-[11px]">
-            <span>Carácter orientativo académico</span>
+          <div className="text-[#2D5A46] font-medium whitespace-nowrap flex items-center gap-1.5 text-[11px]">
+            <span>Protocolo de Diagnóstico Agronómico</span>
             <span aria-hidden="true">·</span>
-            <span>Deducción en SWI-Prolog</span>
+            <span>Inferencia Deductiva SWI-Prolog</span>
           </div>
         </div>
       </div>

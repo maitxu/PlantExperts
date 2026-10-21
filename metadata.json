@@ -1,6 +1,6 @@
 {
   "name": "PlantExpert",
-  "description": "Sistema experto académico de orientación sobre problemas fitosanitarios y fisiopatías en tomateras al aire libre en huertos domésticos de Euskadi.",
+  "description": "Plataforma profesional de diagnóstico fitosanitario y bio-vigilancia agronómica para cultivos de tomate (Solanum lycopersicum).",
   "requestFramePermissions": [],
   "majorCapabilities": [
     "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"

@@ -48,6 +48,49 @@ export default function App() {
 
   const questionnaireRef = useRef<HTMLDivElement>(null);
 
+  // Sincronización con el historial del navegador para que el botón "Atrás" nunca salga de la app ni cargue archivos previos
+  React.useEffect(() => {
+    const handlePopState = (event: PopStateEvent) => {
+      if (event.state?.vista === 'resultado') {
+        setVistaActiva('resultado');
+      } else {
+        setVistaActiva('cuestionario');
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  // Función explícita y segura para volver al cuestionario
+  const irACuestionario = () => {
+    setVistaActiva('cuestionario');
+    setActiveTab('cuestionario');
+    try {
+      if (window.history.state?.vista === 'resultado') {
+        window.history.back();
+      } else {
+        window.history.replaceState({ vista: 'cuestionario' }, '', '#cuestionario');
+      }
+    } catch {
+      // Ignorar restricciones en entornos de prueba
+    }
+    setTimeout(() => {
+      if (questionnaireRef.current) {
+        questionnaireRef.current.scrollIntoView({ behavior: 'smooth' });
+      } else {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+    }, 50);
+  };
+
+  // Reconectar instantáneamente con el servicio local SWI-Prolog en /prolog-api
+  const handleReconectarLocal = () => {
+    const localUrl = '/prolog-api';
+    setApiBaseUrlState(localUrl);
+    ejecutarConsulta(payloadEnviado, localUrl);
+  };
+
   // Ejecución de la consulta a la API SWI-Prolog
   const ejecutarConsulta = async (payload: DiagnosticarRequest, customUrl?: string) => {
     setIsLoading(true);
@@ -73,6 +116,11 @@ export default function App() {
     }
 
     setVistaActiva('resultado');
+    try {
+      window.history.pushState({ vista: 'resultado' }, '', '#resultado');
+    } catch {
+      // Ignorar restricciones
+    }
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -98,18 +146,14 @@ export default function App() {
       }
 
       if (caso.humedadSuelo === 'seca') si.push('suelo_seco');
-      else if (caso.humedadSuelo === 'humeda') si.push('suelo_humedo');
-      else if (caso.humedadSuelo === 'empapada') si.push('suelo_empapado');
-      else if (caso.humedadSuelo === 'no_lo_se') desconocidos.push('humedad_suelo');
-      else no_comprobados.push('humedad_suelo');
+      else if (caso.humedadSuelo === 'humeda') { /* tempero normal */ }
+      else if (caso.humedadSuelo === 'empapada') si.push('suelo_encharcado');
+      else if (caso.humedadSuelo === 'no_lo_se') desconocidos.push('suelo_humedad_desconocida');
+      else no_comprobados.push('suelo_humedad_desconocida');
 
       ejecutarConsulta({ si, desconocidos, no_comprobados });
     } else {
-      setVistaActiva('cuestionario');
-      setActiveTab('cuestionario');
-      if (questionnaireRef.current) {
-        questionnaireRef.current.scrollIntoView({ behavior: 'smooth' });
-      }
+      irACuestionario();
     }
   };
 
@@ -128,16 +172,15 @@ export default function App() {
     setHumedadSuelo('');
     setResultado(null);
     setVistaActiva('cuestionario');
+    try {
+      window.history.replaceState({ vista: 'cuestionario' }, '', '#cuestionario');
+    } catch {
+      // Ignorar restricciones
+    }
   };
 
   const scrollToQuestionnaire = () => {
-    setVistaActiva('cuestionario');
-    setActiveTab('cuestionario');
-    setTimeout(() => {
-      if (questionnaireRef.current) {
-        questionnaireRef.current.scrollIntoView({ behavior: 'smooth' });
-      }
-    }, 50);
+    irACuestionario();
   };
 
   return (
@@ -148,16 +191,18 @@ export default function App() {
         onOpenConnection={() => setConnectionModalOpen(true)}
         onOpenTests={() => {
           setActiveTab('pruebas');
-          setVistaActiva('cuestionario');
+          irACuestionario();
         }}
+        onVolverAlCuestionario={irACuestionario}
         activeTab={activeTab}
         setActiveTab={(tab) => {
           setActiveTab(tab);
           if (tab === 'cuestionario') {
-            setVistaActiva('cuestionario');
+            irACuestionario();
           }
         }}
         apiBaseUrl={apiBaseUrl}
+        vistaActiva={vistaActiva}
       />
 
       {/* Contenedor Principal */}
@@ -170,6 +215,7 @@ export default function App() {
               setActiveTab('pruebas');
             }}
             onAbrirInfo={() => setInfoModalOpen(true)}
+            onAbrirConfiguracion={() => setConnectionModalOpen(true)}
             apiBaseUrl={apiBaseUrl}
           />
         )}
@@ -203,9 +249,10 @@ export default function App() {
                 endpointConsultado={endpointConsultado}
                 errorMensaje={errorMensaje}
                 isConnectionError={isConnectionError}
-                onVolverYCorregir={() => setVistaActiva('cuestionario')}
+                onVolverYCorregir={irACuestionario}
                 onNuevaConsulta={handleReset}
-                onReintentar={() => ejecutarConsulta(payloadEnviado)}
+                onReintentar={() => ejecutarConsulta(payloadEnviado, endpointConsultado.replace(/\/diagnosticar$/, ''))}
+                onReconectarServicioLocal={handleReconectarLocal}
                 onAbrirConfiguracion={() => setConnectionModalOpen(true)}
                 isLoading={isLoading}
               />
@@ -219,10 +266,10 @@ export default function App() {
         <div className="max-w-6xl mx-auto px-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="space-y-1 text-center sm:text-left">
             <p className="font-serif font-bold text-[#1D3B2F] text-sm">
-              PlantExpert · Laboratorio Botánico Contemporáneo
+              PlantExpert Pro · Plataforma de Diagnóstico Fitosanitario
             </p>
             <p className="text-[11px] text-[#5A736A]">
-              Sistema experto académico para tomateras de huertos domésticos en Euskadi (clima atlántico).
+              Motor de evaluación clínica y bio-vigilancia fitopatológica para cultivos de tomate (Solanum lycopersicum).
             </p>
           </div>
 
@@ -231,7 +278,7 @@ export default function App() {
               onClick={() => setInfoModalOpen(true)}
               className="hover:text-[#1D3B2F] underline cursor-pointer"
             >
-              Fuentes &amp; Referencias
+              Dossier Técnico &amp; Referencias
             </button>
             <span aria-hidden="true" className="text-[#52796F]/40">·</span>
             <button

@@ -1,6 +1,6 @@
 /**
- * Definiciones de tipos para PlantExpert
- * Sistema experto académico para diagnóstico de tomateras en huertos de Euskadi
+ * Definiciones de tipos para PlantExpert Enterprise
+ * Plataforma profesional de diagnóstico fitosanitario y bio-vigilancia agronómica
  */
 
 export type CategoriaSintoma = 'hojas' | 'lesiones' | 'frutos' | 'riego_nutricion';
@@ -31,6 +31,7 @@ export interface DiagnosticarRequest {
 
 export type EstadoDiagnostico =
   | 'hipotesis_generada'
+  | 'hipotesis_generadas'
   | 'diagnostico_diferencial'
   | 'informacion_insuficiente'
   | 'ninguna_regla_encaja'

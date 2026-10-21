@@ -1,12 +1,12 @@
-/** <module> PlantExpert - Servidor de Diagnóstico en SWI-Prolog
- * 
- * Sistema experto académico para diagnóstico de problemas en tomateras
- * de huertos domésticos en Euskadi.
+/** <module> PlantExpert Enterprise - Servidor y Motor de Inferencia en SWI-Prolog
  *
- * Para ejecutar el servidor:
- *   swipl prolog/plantexpert.pl
- * O en la consola de SWI-Prolog:
- *   ?- server(8000).
+ * Motor de inferencia y evaluación clínica agronómica para cultivos de tomate.
+ * Integra:
+ *   - Base de conocimiento fitopatológica (cláusulas de Horn)
+ *   - Encadenamiento hacia adelante (forward chaining: responder/4)
+ *   - Encadenamiento hacia atrás (backward chaining: ejemplo_hacia_atras/3)
+ *   - Detección de incompatibilidades / conflictos lógicos
+ *   - Servidor HTTP con endpoints POST /diagnosticar y POST /encadenamiento_atras
  */
 
 :- use_module(library(http/thread_httpd)).
@@ -14,22 +14,149 @@
 :- use_module(library(http/http_json)).
 :- use_module(library(http/http_cors)).
 
-% Habilitar CORS para permitir peticiones desde la interfaz React
+% Habilitar CORS para peticiones desde cualquier origen
 :- set_setting(http:cors, [*]).
 
-% Enrutador de la API
+% Enrutadores HTTP
 :- http_handler(root(diagnosticar), manejar_diagnostico, [method(post), methods([post, options])]).
+:- http_handler(root(encadenamiento_atras), manejar_encadenamiento_atras, [method(post), methods([post, options])]).
+:- http_handler(root(salud), manejar_salud, [method(get)]).
 
-%% Iniciar el servidor HTTP en el puerto indicado (por defecto 8000)
-server(Port) :-
-    http_server(http_dispatch, [port(Port)]),
-    format('~n[PlantExpert] Servidor SWI-Prolog iniciado en http://localhost:~w/~n', [Port]),
-    format('[PlantExpert] Endpoint de diagnostico: POST http://localhost:~w/diagnosticar~n~n', [Port]).
+%% -------------------------------------------------------------
+%% Base de Conocimiento — Reglas de Diagnóstico Agronómico
+%% -------------------------------------------------------------
+% regla(Causa, ListaDeHechosNecesarios, ReglaID).
 
-% Si se carga directamente el archivo desde la línea de comandos, iniciar en 8000
-:- initialization(server(8000), main).
+regla(alternariosis,
+      [manchas_marrones, anillos_concentricos],
+      'R1_ALT').
+regla(alternariosis,
+      [manchas_marrones_negras, anillos_concentricos],
+      'R1_ALT').
 
-%% Manejador para pre-flight CORS OPTIONS y POST
+regla(oidio,
+      [manchas_amarillas, crecimiento_blanco_enves],
+      'R2_OID').
+regla(oidio,
+      [amarilleo_hojas, crecimiento_blanco_hojas],
+      'R2_OID').
+
+regla(mildiu_tardio,
+      [lesiones_irregulares_acuosas, crecimiento_blanco_enves],
+      'R3_MIL_1').
+regla(mildiu_tardio,
+      [lesiones_irregulares_acuosas, avance_rapido, tiempo_reciente_humedo],
+      'R3_MIL_2').
+
+regla(mancha_bacteriana,
+      [manchas_pequenas_oscuras, halo_amarillo],
+      'R4_BAC_1').
+regla(mancha_bacteriana,
+      [lesiones_fruto_asperas_oscuras],
+      'R4_BAC_2').
+
+regla(estres_por_falta_de_agua,
+      [marchitez, suelo_seco],
+      'R5_SEQ').
+
+regla(posible_exceso_de_agua_o_problema_radicular,
+      [marchitez, suelo_encharcado],
+      'R6_EXC').
+
+regla(problema_nutricional_a_investigar,
+      [amarilleo, patron_amarilleo_entre_hojas],
+      'R7_NUT').
+
+%% -------------------------------------------------------------
+%% Motor de Inferencia — Encadenamiento hacia adelante
+%% -------------------------------------------------------------
+
+todos_presentes([], _).
+todos_presentes([H|T], Hechos) :-
+    memberchk(H, Hechos),
+    todos_presentes(T, Hechos).
+
+hipotesis_activada(Hechos, hipotesis(Causa, Requisitos, ReglaID)) :-
+    regla(Causa, Requisitos, ReglaID),
+    todos_presentes(Requisitos, Hechos).
+
+% Detección de inconsistencias / conflictos en hechos
+detectar_conflictos(Hechos, Conflictos) :-
+    findall(C, conflicto_hechos(Hechos, C), Conflictos).
+
+conflicto_hechos(Hechos, "El suelo no puede estar simultáneamente seco y encharcado.") :-
+    member(suelo_seco, Hechos),
+    member(suelo_encharcado, Hechos).
+
+responder_motor(HechosSi, Desconocidos, NoComprobados, Estado, HipotesisAgrupadas, Pendientes, Conflictos) :-
+    detectar_conflictos(HechosSi, Conflictos),
+    (   Conflictos \= []
+    ->  Estado = respuestas_incompatibles,
+        HipotesisAgrupadas = [],
+        Pendientes = []
+    ;   findall(hipotesis(C, Req, RId), hipotesis_activada(HechosSi, hipotesis(C, Req, RId)), Todas),
+        agrupar_hipotesis(Todas, HipotesisAgrupadas),
+        append(Desconocidos, NoComprobados, P0),
+        sort(P0, Pendientes),
+        determinar_estado(HipotesisAgrupadas, Pendientes, Estado)
+    ).
+
+determinar_estado([_], _, hipotesis_generada) :- !.
+determinar_estado([_,_|_], _, diagnostico_diferencial) :- !.
+determinar_estado(Hipotesis, _, hipotesis_generada) :-
+    Hipotesis \= [],
+    !.
+determinar_estado([], Pendientes, informacion_insuficiente) :-
+    Pendientes \= [],
+    !.
+determinar_estado([], [], ninguna_regla_encaja).
+
+%% Agrupa reglas alternativas que conducen a la misma causa
+agrupar_hipotesis(ListaCruda, Agrupadas) :-
+    findall(Causa, member(hipotesis(Causa, _, _), ListaCruda), CausasDuplicadas),
+    sort(CausasDuplicadas, CausasUnicas),
+    maplist(combinar_para_causa(ListaCruda), CausasUnicas, Agrupadas).
+
+combinar_para_causa(ListaCruda, Causa, DictResultado) :-
+    findall(RId, member(hipotesis(Causa, _, RId), ListaCruda), ReglasIds0),
+    sort(ReglasIds0, ReglasIds),
+    findall(Req, member(hipotesis(Causa, Req, _), ListaCruda), ListasReqs),
+    flatten(ListasReqs, ReqsAplanados),
+    sort(ReqsAplanados, ReqsUnicos),
+    DictResultado = _{
+        causa: Causa,
+        reglas_ids: ReglasIds,
+        requisitos_cumplidos: ReqsUnicos
+    }.
+
+%% -------------------------------------------------------------
+%% Motor de Inferencia — Encadenamiento hacia atrás
+%% -------------------------------------------------------------
+
+ejemplo_hacia_atras(Causa, Hechos, Resultado) :-
+    findall(Req, regla(Causa, Req, _), Conjuntos),
+    (   Conjuntos = []
+    ->  Resultado = no_hay_regla_para_esa_causa
+    ;   member(Req, Conjuntos),
+        todos_presentes(Req, Hechos)
+    ->  Resultado = respaldada(Req)
+    ;   member(Req, Conjuntos),
+        subtract(Req, Hechos, Faltan),
+        Resultado = faltan_datos(Faltan, Req)
+    ).
+
+%% -------------------------------------------------------------
+%% Controladores HTTP JSON
+%% -------------------------------------------------------------
+
+manejar_salud(Request) :-
+    cors_enable(Request, [methods([get, options])]),
+    reply_json_dict(_{
+        estado: "ok",
+        motor: "SWI-Prolog v9",
+        sistema: "PlantExpert"
+    }).
+
 manejar_diagnostico(Request) :-
     option(method(options), Request), !,
     cors_enable(Request, [methods([post, options])]),
@@ -38,139 +165,71 @@ manejar_diagnostico(Request) :-
 manejar_diagnostico(Request) :-
     cors_enable(Request, [methods([post, options])]),
     http_read_json_dict(Request, DatosEntrada),
-    procesar_consulta(DatosEntrada, RespuestaDict),
+    procesar_diagnostico_json(DatosEntrada, RespuestaDict),
     reply_json_dict(RespuestaDict).
 
-%% Procesar consulta a partir de los hechos suministrados
-procesar_consulta(Dict, Respuesta) :-
-    Si = Dict.get(si, []),
-    Desc = Dict.get(desconocidos, []),
-    NoComp = Dict.get(no_comprobados, []),
+procesar_diagnostico_json(Dict, Respuesta) :-
+    convertir_a_atomos(Dict.get(si, []), Si),
+    convertir_a_atomos(Dict.get(desconocidos, []), Desc),
+    convertir_a_atomos(Dict.get(no_comprobados, []), NoComp),
 
-    % 1. Detectar conflictos / inconsistencias lógicas
-    (   detectar_conflictos(Si, Conflictos), Conflictos \= []
+    responder_motor(Si, Desc, NoComp, Estado, Hipotesis, Pendientes, Conflictos),
+
+    (   Estado == respuestas_incompatibles
     ->  Respuesta = _{
             estado: respuestas_incompatibles,
             conflictos: Conflictos,
             aviso: "Se han detectado observaciones contradictorias en las respuestas del cuestionario."
         }
-    % 2. Evaluar reglas de diagnóstico patológico y fisiopático
-    ;   evaluar_todas_reglas(Si, HipotesisDetectadas),
-        (   % Caso: Reglas activadas
-            HipotesisDetectadas \= []
-        ->  agrupar_hipotesis(HipotesisDetectadas, HipotesisAgrupadas),
-            (   length(HipotesisAgrupadas, 1)
-            ->  Estado = hipotesis_generada,
-                Aviso = "El sistema ha identificado una hipotesis explicativa solida acorde a las reglas academicas."
-            ;   Estado = diagnostico_diferencial,
-                Aviso = "Existen multiples posibilidades diferenciales compatibles. Examine los signos especificos de cada afeccion para discriminar."
-            ),
-            Respuesta = _{
-                estado: Estado,
-                hipotesis: HipotesisAgrupadas,
-                aviso: Aviso
-            }
-        % Caso: Marchitez presente pero falta dato de humedad del suelo o cuello
-        ;   member("marchitez", Si),
-            ( member("humedad_suelo", Desc) ; member("humedad_suelo", NoComp) )
-        ->  Respuesta = _{
-                estado: informacion_insuficiente,
-                datos_pendientes: ["humedad_suelo", "pudricion_cuello_raiz"],
-                aviso: "La marchitez requiere discriminar la condicion del sustrato (sequedad, encharcamiento o afeccion del cuello) para formular una hipotesis valida."
-            }
-        % Caso: Ninguna regla encaja
-        ;   Respuesta = _{
-                estado: ninguna_regla_encaja,
-                aviso: "Los sintomas reportados no satisfacen ninguna regla patologica o fisiopatica del sistema experto."
-            }
-        )
-    ).
-
-%% -------------------------------------------------------------
-%% Base de Conocimiento y Reglas Formales (Cláusulas de Horn)
-%% -------------------------------------------------------------
-
-% Regla R_ALT_01: Alternariosis
-regla('R_ALT_01', 'Alternariosis (Negron del tomate)', 'Alternaria solani',
-      ["manchas_marrones_negras", "anillos_concentricos"]).
-
-% Regla R_OID_01: Oídio foliar
-regla('R_OID_01', 'Oidio o Ceniza de la tomatera', 'Oidium neolycopersici / Leveillula taurica',
-      ["amarilleo_hojas", "crecimiento_blanco_hojas"]).
-
-% Regla R_MIL_01: Mildiu principal
-regla('R_MIL_01', 'Mildiu de la tomatera', 'Phytophthora infestans',
-      ["lesiones_irregulares_acuosas", "manchas_tallo", "tiempo_reciente_humedo"]).
-
-% Regla R_MIL_02: Mildiu alternativa (frecuente en clima atlantico de Euskadi)
-regla('R_MIL_02', 'Mildiu de la tomatera', 'Phytophthora infestans',
-      ["lesiones_irregulares_acuosas", "avance_rapido", "tiempo_reciente_humedo"]).
-
-% Regla R_BOT_01: Botrytis / Podredumbre gris
-regla('R_BOT_01', 'Podredumbre gris o Botrytis', 'Botrytis cinerea',
-      ["moho_gris_tallos", "tiempo_reciente_humedo"]).
-
-% Regla R_BER_01: Necrosis apical / Peseta (vía riego irregular)
-regla('R_BER_01', 'Podredumbre apical (Peseta / Blossom End Rot)', 'Fisiopatia nutricional-hidrica (deficit de calcio)',
-      ["podredumbre_apical", "riego_irregular"]).
-
-% Regla R_BER_02: Necrosis apical / Peseta (vía sequía)
-regla('R_BER_02', 'Podredumbre apical (Peseta / Blossom End Rot)', 'Fisiopatia nutricional-hidrica (deficit de calcio)',
-      ["podredumbre_apical", "suelo_seco"]).
-
-% Regla R_ASF_01: Asfixia radicular
-regla('R_ASF_01', 'Asfixia radicular y encharcamiento', 'Trastorno hipoxico radicular',
-      ["marchitez", "suelo_empapado"]).
-
-% Regla R_SEQ_01: Deficit hidrico acusado
-regla('R_SEQ_01', 'Deficiencia hidrica severa (Sequia)', 'Estres hidrico abiotico',
-      ["marchitez", "suelo_seco"]).
-
-%% Evaluar todas las reglas frente a la lista de hechos positivos
-evaluar_todas_reglas(Hechos, Hipotesis) :-
-    findall(
-        _{
-            regla_id: ReglaId,
-            causa: Causa,
-            nombre_cientifico: NombreCientifico,
-            requisitos_cumplidos: Req
-        },
-        (
-            regla(ReglaId, Causa, NombreCientifico, Req),
-            subset_atomos(Req, Hechos)
+    ;   (Estado == hipotesis_generada ; Estado == diagnostico_diferencial ; Estado == hipotesis_generadas)
+    ->  (   (Estado == diagnostico_diferencial ; length(Hipotesis, Len), Len > 1)
+        ->  Aviso = "Evaluación fitosanitaria: se han identificado múltiples etiologías concurrentes. Se recomienda diagnóstico diferencial de campo."
+        ;   Aviso = "Evaluación fitosanitaria completada. Patología identificada con alta correlación clínica según protocolo agronómico."
         ),
-        Hipotesis
+        Respuesta = _{
+            estado: Estado,
+            hipotesis: Hipotesis,
+            datos_pendientes: Pendientes,
+            aviso: Aviso
+        }
+    ;   Estado == informacion_insuficiente
+    ->  Respuesta = _{
+            estado: informacion_insuficiente,
+            hipotesis: [],
+            datos_pendientes: Pendientes,
+            aviso: "Información clínica insuficiente para emitir un diagnóstico concluyente. Se requieren observaciones sintomáticas adicionales."
+        }
+    ;   Respuesta = _{
+            estado: ninguna_regla_encaja,
+            hipotesis: [],
+            datos_pendientes: [],
+            aviso: "El cuadro sintomático no coincide con los patrones patogénicos tabulados. Puede deberse a factores abióticos o estrés ambiental no catalogado."
+        }
     ).
 
-%% Comprobación de que todos los requisitos están contenidos en los hechos afirmados
-subset_atomos([], _).
-subset_atomos([H|T], Lista) :-
-    member(H, Lista),
-    subset_atomos(T, Lista).
+manejar_encadenamiento_atras(Request) :-
+    cors_enable(Request, [methods([post, options])]),
+    http_read_json_dict(Request, Dict),
+    CausaAtom = Dict.get(causa),
+    convertir_a_atomos(Dict.get(hechos, []), Hechos),
+    ejemplo_hacia_atras(CausaAtom, Hechos, Res),
+    (   Res = respaldada(Req)
+    ->  Resp = _{ resultado: "respaldada", requisitos: Req }
+    ;   Res = faltan_datos(Faltan, Req)
+    ->  Resp = _{ resultado: "faltan_datos", faltan: Faltan, requisitos: Req }
+    ;   Resp = _{ resultado: "no_hay_regla" }
+    ),
+    reply_json_dict(Resp).
 
-%% Agrupar reglas alternativas que conducen a la misma causa
-agrupar_hipotesis(ListaCruda, Agrupadas) :-
-    findall(Causa, member(_{causa: Causa}, ListaCruda), CausasDuplicadas),
-    sort(CausasDuplicadas, CausasUnicas),
-    maplist(combinar_para_causa(ListaCruda), CausasUnicas, Agrupadas).
+convertir_a_atomos([], []).
+convertir_a_atomos([H|T], [Atom|Resto]) :-
+    atom_string(Atom, H),
+    convertir_a_atomos(T, Resto).
 
-combinar_para_causa(ListaCruda, Causa, DictResultado) :-
-    findall(RId, member(_{causa: Causa, regla_id: RId}, ListaCruda), ReglasIds),
-    findall(Req, member(_{causa: Causa, requisitos_cumplidos: Req}, ListaCruda), ListasReqs),
-    flatten(ListasReqs, ReqsAplanados),
-    sort(ReqsAplanados, ReqsUnicos),
-    member(_{causa: Causa, nombre_cientifico: NC}, ListaCruda),
-    DictResultado = _{
-        causa: Causa,
-        nombre_cientifico: NC,
-        reglas_ids: ReglasIds,
-        requisitos_cumplidos: ReqsUnicos
-    }.
-
-%% Detección de incompatibilidades en respuestas
-detectar_conflictos(Si, Conflictos) :-
-    findall(Conflicto, conflicto(Si, Conflicto), Conflictos).
-
-conflicto(Si, "El suelo no puede reportarse simultaneamente seco y empapado.") :-
-    member("suelo_seco", Si),
-    member("suelo_empapado", Si).
+%% Iniciar servidor HTTP en el puerto indicado
+server(Port) :-
+    (   http_current_server(Port, _)
+    ->  format('~n[PlantExpert] Servidor SWI-Prolog ya activo en puerto ~w~n', [Port])
+    ;   http_server(http_dispatch, [port(Port)]),
+        format('~n[PlantExpert] Servidor SWI-Prolog iniciado en puerto ~w~n', [Port])
+    ).

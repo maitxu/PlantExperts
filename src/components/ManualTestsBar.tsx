@@ -23,15 +23,15 @@ export const ManualTestsBar: React.FC<ManualTestsBarProps> = ({
           </div>
           <div>
             <h2 id="tests-title" className="text-base font-serif font-bold text-[#1D3B2F]">
-              Batería de Pruebas Académicas
+              Batería de Validación Fitosanitaria
             </h2>
             <p className="text-[11px] text-[#52796F]">
-              Casos de verificación rápida de la base de conocimiento en SWI-Prolog
+              Escenarios clínicos de referencia y validación de campo en SWI-Prolog
             </p>
           </div>
         </div>
         <span className="text-xs text-[#52796F] font-mono">
-          7 casos obligatorios
+          7 escenarios de referencia
         </span>
       </div>
 

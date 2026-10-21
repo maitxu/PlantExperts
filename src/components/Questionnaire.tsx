@@ -22,6 +22,9 @@ import {
   LayoutList,
   Sparkles,
   Layers,
+  Leaf,
+  Apple,
+  CheckCircle2,
 } from 'lucide-react';
 
 interface QuestionnaireProps {
@@ -76,13 +79,13 @@ export const Questionnaire: React.FC<QuestionnaireProps> = ({
     if (humedadSuelo === 'seca') {
       si.push('suelo_seco');
     } else if (humedadSuelo === 'humeda') {
-      si.push('suelo_humedo');
+      // Suelo con tempero normal
     } else if (humedadSuelo === 'empapada') {
-      si.push('suelo_empapado');
+      si.push('suelo_encharcado');
     } else if (humedadSuelo === 'no_lo_se') {
-      desconocidos.push('humedad_suelo');
+      desconocidos.push('suelo_humedad_desconocida');
     } else {
-      no_comprobados.push('humedad_suelo');
+      no_comprobados.push('suelo_humedad_desconocida');
     }
 
     return { si, desconocidos, no_comprobados };
@@ -95,6 +98,36 @@ export const Questionnaire: React.FC<QuestionnaireProps> = ({
     (humedadSuelo !== '' ? 1 : 0);
 
   const porcentajeProgreso = Math.round((totalRespondidas / totalPreguntas) * 100);
+
+  // --- Métricas específicas solicitadas para las categorías de hojas, frutos y riego ---
+  const preguntasHojas = PREGUNTAS_SINTOMAS.filter((p) => p.categoria === 'hojas');
+  const totalHojas = preguntasHojas.length;
+  const respondidasHojas = preguntasHojas.filter(
+    (p) => respuestas[p.id] && respuestas[p.id] !== 'sin_comprobar'
+  ).length;
+  const pctHojas = totalHojas > 0 ? Math.round((respondidasHojas / totalHojas) * 100) : 0;
+
+  const preguntasFrutos = PREGUNTAS_SINTOMAS.filter((p) => p.categoria === 'frutos');
+  const totalFrutos = preguntasFrutos.length;
+  const respondidasFrutos = preguntasFrutos.filter(
+    (p) => respuestas[p.id] && respuestas[p.id] !== 'sin_comprobar'
+  ).length;
+  const pctFrutos = totalFrutos > 0 ? Math.round((respondidasFrutos / totalFrutos) * 100) : 0;
+
+  const preguntasRiego = PREGUNTAS_SINTOMAS.filter((p) => p.categoria === 'riego_nutricion');
+  const totalRiego = preguntasRiego.length + 1; // +1 por selector de humedad de suelo
+  const respondidasRiego =
+    preguntasRiego.filter((p) => respuestas[p.id] && respuestas[p.id] !== 'sin_comprobar').length +
+    (humedadSuelo !== '' ? 1 : 0);
+  const pctRiego = totalRiego > 0 ? Math.round((respondidasRiego / totalRiego) * 100) : 0;
+
+  // Estadísticas combinadas de Hojas, Frutos y Riego
+  const totalCategoriasClave = totalHojas + totalFrutos + totalRiego;
+  const respondidasCategoriasClave = respondidasHojas + respondidasFrutos + respondidasRiego;
+  const porcentajeProgresoClave =
+    totalCategoriasClave > 0
+      ? Math.round((respondidasCategoriasClave / totalCategoriasClave) * 100)
+      : 0;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -199,6 +232,209 @@ export const Questionnaire: React.FC<QuestionnaireProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Barra de progreso visual por categorías: Hojas, Frutos y Riego */}
+      <section
+        aria-label="Progreso en categorías de hojas, frutos y riego"
+        className="bg-[#FFFFFF] border border-[#52796F]/20 rounded-xl p-4 sm:p-5 shadow-xs"
+      >
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-3.5">
+          <div className="space-y-0.5">
+            <div className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-[#2D5A46] inline-block" aria-hidden="true" />
+              <h3 className="text-sm sm:text-base font-serif font-bold text-[#1D3B2F] tracking-tight">
+                Progreso en Hojas, Frutos y Riego
+              </h3>
+            </div>
+            <p className="text-xs text-[#5A736A]">
+              Indicador de preguntas completadas en las categorías clave para el motor de diagnóstico
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2 self-start md:self-auto bg-[#FAFBF7] px-3.5 py-1.5 rounded-lg border border-[#52796F]/20 shadow-2xs">
+            <span className="text-xs font-medium text-[#465E55]">Total completado:</span>
+            <span className="text-sm font-mono font-bold text-[#1D3B2F]">
+              {respondidasCategoriasClave} / {totalCategoriasClave}
+            </span>
+            <span className="text-xs font-mono font-bold text-[#2D5A46] bg-[#2D5A46]/10 px-1.5 py-0.5 rounded">
+              {porcentajeProgresoClave}%
+            </span>
+          </div>
+        </div>
+
+        {/* Barra de progreso visual general con desglose por color */}
+        <div className="space-y-2 mb-4">
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-[#52796F] font-medium">Completitud global de las 3 categorías:</span>
+            <span className="font-mono text-xs font-semibold text-[#1D3B2F]">
+              {respondidasCategoriasClave} de {totalCategoriasClave} preguntas ({porcentajeProgresoClave}%)
+            </span>
+          </div>
+
+          {/* Barra de progreso multivariante proporcional */}
+          <div
+            className="w-full bg-[#E8ECE2] h-3.5 rounded-full overflow-hidden flex p-0.5 shadow-inner"
+            role="progressbar"
+            aria-valuenow={porcentajeProgresoClave}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-label={`Progreso de hojas, frutos y riego: ${porcentajeProgresoClave}%`}
+          >
+            {/* Segmento Hojas (verde bosque) */}
+            <div
+              className="bg-[#2D5A46] h-full transition-all duration-300 rounded-l-full"
+              style={{ width: `${totalCategoriasClave > 0 ? (respondidasHojas / totalCategoriasClave) * 100 : 0}%` }}
+              title={`Hojas: ${respondidasHojas}/${totalHojas}`}
+            />
+            {/* Segmento Frutos (terracota/coral) */}
+            <div
+              className="bg-[#B46536] h-full transition-all duration-300"
+              style={{ width: `${totalCategoriasClave > 0 ? (respondidasFrutos / totalCategoriasClave) * 100 : 0}%` }}
+              title={`Frutos: ${respondidasFrutos}/${totalFrutos}`}
+            />
+            {/* Segmento Riego (azul botánico) */}
+            <div
+              className="bg-[#2E5E7A] h-full transition-all duration-300 rounded-r-full"
+              style={{ width: `${totalCategoriasClave > 0 ? (respondidasRiego / totalCategoriasClave) * 100 : 0}%` }}
+              title={`Riego: ${respondidasRiego}/${totalRiego}`}
+            />
+          </div>
+
+          {/* Leyenda de la barra */}
+          <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-[#5A736A] pt-0.5">
+            <div className="flex items-center gap-3">
+              <span className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-full bg-[#2D5A46]" aria-hidden="true" />
+                <span>Hojas ({respondidasHojas}/{totalHojas})</span>
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-full bg-[#B46536]" aria-hidden="true" />
+                <span>Frutos ({respondidasFrutos}/{totalFrutos})</span>
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-full bg-[#2E5E7A]" aria-hidden="true" />
+                <span>Riego ({respondidasRiego}/{totalRiego})</span>
+              </span>
+            </div>
+            <span className="font-mono text-[10px] text-[#6E887E]">
+              {totalCategoriasClave - respondidasCategoriasClave === 0
+                ? '¡Todas completadas!'
+                : `${totalCategoriasClave - respondidasCategoriasClave} pendientes`}
+            </span>
+          </div>
+        </div>
+
+        {/* Tarjetas interactivas de cada categoría con mini-barra de progreso */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1">
+          {/* Tarjeta Hojas */}
+          <button
+            type="button"
+            onClick={() => {
+              const idx = CATEGORIAS.findIndex((c) => c.id === 'hojas');
+              if (idx !== -1) setPasoActual(idx);
+            }}
+            className={`p-3 rounded-lg border text-left transition-all cursor-pointer ${
+              modoVisualizacion === 'por_pasos' && CATEGORIAS[pasoActual]?.id === 'hojas'
+                ? 'bg-[#F2F6F3] border-[#2D5A46] ring-1 ring-[#2D5A46]/30'
+                : 'bg-[#FAFBF7] border-[#52796F]/20 hover:bg-[#F0F2EB]'
+            }`}
+          >
+            <div className="flex items-center justify-between gap-1 mb-1.5">
+              <span className="flex items-center gap-1.5 text-xs font-semibold text-[#1D3B2F]">
+                <Leaf className="w-3.5 h-3.5 text-[#2D5A46]" aria-hidden="true" />
+                Hojas ({respondidasHojas}/{totalHojas})
+              </span>
+              <span className="text-[11px] font-mono font-bold text-[#2D5A46]">
+                {pctHojas}%
+              </span>
+            </div>
+            <div className="w-full bg-[#E0E7DC] h-2 rounded-full overflow-hidden mb-1">
+              <div
+                className="bg-[#2D5A46] h-full transition-all duration-300 rounded-full"
+                style={{ width: `${pctHojas}%` }}
+              />
+            </div>
+            <div className="flex items-center justify-between text-[10px] text-[#5A736A]">
+              <span>{totalHojas - respondidasHojas > 0 ? `${totalHojas - respondidasHojas} por responder` : 'Completado'}</span>
+              {respondidasHojas === totalHojas && (
+                <CheckCircle2 className="w-3 h-3 text-[#2D5A46]" aria-hidden="true" />
+              )}
+            </div>
+          </button>
+
+          {/* Tarjeta Frutos */}
+          <button
+            type="button"
+            onClick={() => {
+              const idx = CATEGORIAS.findIndex((c) => c.id === 'frutos');
+              if (idx !== -1) setPasoActual(idx);
+            }}
+            className={`p-3 rounded-lg border text-left transition-all cursor-pointer ${
+              modoVisualizacion === 'por_pasos' && CATEGORIAS[pasoActual]?.id === 'frutos'
+                ? 'bg-[#FBF5F0] border-[#B46536] ring-1 ring-[#B46536]/30'
+                : 'bg-[#FAFBF7] border-[#52796F]/20 hover:bg-[#F0F2EB]'
+            }`}
+          >
+            <div className="flex items-center justify-between gap-1 mb-1.5">
+              <span className="flex items-center gap-1.5 text-xs font-semibold text-[#1D3B2F]">
+                <Apple className="w-3.5 h-3.5 text-[#B46536]" aria-hidden="true" />
+                Frutos ({respondidasFrutos}/{totalFrutos})
+              </span>
+              <span className="text-[11px] font-mono font-bold text-[#B46536]">
+                {pctFrutos}%
+              </span>
+            </div>
+            <div className="w-full bg-[#F3E5DC] h-2 rounded-full overflow-hidden mb-1">
+              <div
+                className="bg-[#B46536] h-full transition-all duration-300 rounded-full"
+                style={{ width: `${pctFrutos}%` }}
+              />
+            </div>
+            <div className="flex items-center justify-between text-[10px] text-[#5A736A]">
+              <span>{totalFrutos - respondidasFrutos > 0 ? `${totalFrutos - respondidasFrutos} por responder` : 'Completado'}</span>
+              {respondidasFrutos === totalFrutos && (
+                <CheckCircle2 className="w-3 h-3 text-[#B46536]" aria-hidden="true" />
+              )}
+            </div>
+          </button>
+
+          {/* Tarjeta Riego */}
+          <button
+            type="button"
+            onClick={() => {
+              const idx = CATEGORIAS.findIndex((c) => c.id === 'riego_nutricion');
+              if (idx !== -1) setPasoActual(idx);
+            }}
+            className={`p-3 rounded-lg border text-left transition-all cursor-pointer ${
+              modoVisualizacion === 'por_pasos' && CATEGORIAS[pasoActual]?.id === 'riego_nutricion'
+                ? 'bg-[#F0F6FA] border-[#2E5E7A] ring-1 ring-[#2E5E7A]/30'
+                : 'bg-[#FAFBF7] border-[#52796F]/20 hover:bg-[#F0F2EB]'
+            }`}
+          >
+            <div className="flex items-center justify-between gap-1 mb-1.5">
+              <span className="flex items-center gap-1.5 text-xs font-semibold text-[#1D3B2F]">
+                <Droplets className="w-3.5 h-3.5 text-[#2E5E7A]" aria-hidden="true" />
+                Riego y Suelo ({respondidasRiego}/{totalRiego})
+              </span>
+              <span className="text-[11px] font-mono font-bold text-[#2E5E7A]">
+                {pctRiego}%
+              </span>
+            </div>
+            <div className="w-full bg-[#DEECF2] h-2 rounded-full overflow-hidden mb-1">
+              <div
+                className="bg-[#2E5E7A] h-full transition-all duration-300 rounded-full"
+                style={{ width: `${pctRiego}%` }}
+              />
+            </div>
+            <div className="flex items-center justify-between text-[10px] text-[#5A736A]">
+              <span>{totalRiego - respondidasRiego > 0 ? `${totalRiego - respondidasRiego} por responder` : 'Completado'}</span>
+              {respondidasRiego === totalRiego && (
+                <CheckCircle2 className="w-3 h-3 text-[#2E5E7A]" aria-hidden="true" />
+              )}
+            </div>
+          </button>
+        </div>
+      </section>
 
       {/* RENDERIZADO: MODO POR PASOS (WIZARD BOTÁNICO) */}
       {modoVisualizacion === 'por_pasos' && (
