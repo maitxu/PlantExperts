@@ -1,0 +1,31 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --font-serif: 'Fraunces', Georgia, serif;
+    --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+    --font-mono: 'JetBrains Mono', monospace;
+  }
+
+  body {
+    font-family: var(--font-sans);
+    background-color: #F7F8F4;
+    color: #1A2E26;
+  }
+
+  h1, h2, h3, .font-serif {
+    font-family: var(--font-serif);
+  }
+}
+
+/* Subtle botanical paper texture and borders */
+.herbarium-card {
+  background: #FFFFFF;
+  border: 1px solid rgba(82, 121, 111, 0.18);
+  box-shadow: 0 1px 3px 0 rgba(29, 59, 47, 0.04), 0 1px 2px -1px rgba(29, 59, 47, 0.04);
+}
+
+.herbarium-specimen {
+  background: #FAFBF7;
+  border: 1px solid rgba(82, 121, 111, 0.22);
+}

@@ -1,0 +1,8 @@
+{
+  "name": "PlantExpert",
+  "description": "Sistema experto académico de orientación sobre problemas fitosanitarios y fisiopatías en tomateras al aire libre en huertos domésticos de Euskadi.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
